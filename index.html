@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地震情報 - Simple Earthquake News</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌏 地震情報</h1>
+            <p class="subtitle">P2P地震情報APIを利用</p>
+        </header>
+
+        <main>
+            <div class="controls">
+                <div class="control-group">
+                    <label for="date-input">日付:</label>
+                    <input type="date" id="date-input">
+                </div>
+
+                <div class="control-group">
+                    <label for="scale-filter">最小震度:</label>
+                    <select id="scale-filter">
+                        <option value="10">震度1以上</option>
+                        <option value="20">震度2以上</option>
+                        <option value="30" selected>震度3以上</option>
+                        <option value="40">震度4以上</option>
+                        <option value="45">震度5弱以上</option>
+                        <option value="50">震度5強以上</option>
+                        <option value="55">震度6弱以上</option>
+                        <option value="60">震度6強以上</option>
+                    </select>
+                </div>
+
+                <button id="fetch-btn" class="fetch-btn">取得</button>
+            </div>
+
+            <div id="loading" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>データを取得中...</p>
+            </div>
+
+            <div id="error" class="error" style="display: none;"></div>
+
+            <div id="earthquake-list" class="earthquake-list"></div>
+        </main>
+
+        <footer>
+            <p>データ提供: <a href="https://www.p2pquake.net/" target="_blank" rel="noopener">P2P地震情報</a></p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
