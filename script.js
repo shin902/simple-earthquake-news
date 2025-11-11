@@ -1,5 +1,6 @@
 // DOM要素の取得
-const dateInput = document.getElementById('date-input');
+const startDateInput = document.getElementById('start-date-input');
+const endDateInput = document.getElementById('end-date-input');
 const scaleFilter = document.getElementById('scale-filter');
 const fetchBtn = document.getElementById('fetch-btn');
 const loading = document.getElementById('loading');
@@ -41,8 +42,8 @@ function formatDateForDisplay(dateStr) {
 }
 
 // APIから地震情報を取得
-async function fetchEarthquakeData(dateStr, minScale) {
-    const apiUrl = `https://api.p2pquake.net/v2/jma/quake?limit=100&order=1&since_date=${dateStr}&until_date=${dateStr}&min_scale=${minScale}`;
+async function fetchEarthquakeData(startDateStr, endDateStr, minScale) {
+    const apiUrl = `https://api.p2pquake.net/v2/jma/quake?limit=100&order=1&since_date=${startDateStr}&until_date=${endDateStr}&min_scale=${minScale}`;
 
     try {
         const response = await fetch(apiUrl);
@@ -123,15 +124,24 @@ function displayEarthquakes(data) {
 
 // データを取得して表示
 async function loadEarthquakeData() {
-    const selectedDate = new Date(dateInput.value);
-    const dateStr = formatDateForAPI(selectedDate);
+    const startDate = new Date(startDateInput.value);
+    const endDate = new Date(endDateInput.value);
+
+    // 日付の妥当性チェック
+    if (startDate > endDate) {
+        showError('開始日は終了日より前の日付を指定してください');
+        return;
+    }
+
+    const startDateStr = formatDateForAPI(startDate);
+    const endDateStr = formatDateForAPI(endDate);
     const minScale = scaleFilter.value;
 
     setLoading(true);
     error.style.display = 'none';
 
     try {
-        const data = await fetchEarthquakeData(dateStr, minScale);
+        const data = await fetchEarthquakeData(startDateStr, endDateStr, minScale);
         displayEarthquakes(data);
     } catch (err) {
         showError(err.message);
@@ -143,15 +153,23 @@ async function loadEarthquakeData() {
 
 // 初期化
 function init() {
-    // 今日の日付をデフォルトに設定
+    // デフォルトの期間を設定（7日前から今日まで）
     const today = new Date();
-    dateInput.valueAsDate = today;
+    const weekAgo = new Date();
+    weekAgo.setDate(today.getDate() - 7);
+
+    startDateInput.valueAsDate = weekAgo;
+    endDateInput.valueAsDate = today;
 
     // イベントリスナーを設定
     fetchBtn.addEventListener('click', loadEarthquakeData);
 
     // Enterキーでも取得
-    dateInput.addEventListener('keypress', (e) => {
+    startDateInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') loadEarthquakeData();
+    });
+
+    endDateInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') loadEarthquakeData();
     });
 
