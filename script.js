@@ -7,6 +7,10 @@ const loading = document.getElementById('loading');
 const error = document.getElementById('error');
 const earthquakeList = document.getElementById('earthquake-list');
 
+// 地図オブジェクト（グローバル変数）
+let map = null;
+let markersLayer = null;
+
 // 震度スケール変換マップ
 const scaleMap = {
     '-1': '不明',
@@ -26,6 +30,56 @@ function getScaleClass(scale) {
     if (scale >= 50) return 'high';
     if (scale >= 30) return 'medium';
     return 'low';
+}
+
+/**
+ * 地図を初期化
+ */
+function initMap() {
+    // 地図が既に初期化されている場合はスキップ
+    if (map !== null) {
+        return;
+    }
+
+    // 地図を作成（中心: 日本全体、ズームレベル: 5）
+    map = L.map('map').setView([36.5, 138.0], 5);
+
+    // 国土地理院地図タイルレイヤーを追加（淡色地図 - マーカーが見やすい）
+    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
+        attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>',
+        maxZoom: 18,
+        minZoom: 4
+    }).addTo(map);
+
+    // マーカーレイヤーグループを作成
+    markersLayer = L.layerGroup().addTo(map);
+}
+
+/**
+ * 緯度経度の文字列をパース（"N38.3" → 38.3）
+ */
+function parseCoordinate(coord) {
+    if (typeof coord === 'number') {
+        return coord;
+    }
+
+    if (typeof coord === 'string') {
+        // "N38.3", "E141.7" などの形式に対応
+        const value = parseFloat(coord.replace(/[NSEW]/g, ''));
+        const isNegative = coord.includes('S') || coord.includes('W');
+        return isNegative ? -value : value;
+    }
+
+    return null;
+}
+
+/**
+ * 震度に応じたマーカーの色を取得
+ */
+function getMarkerColor(scale) {
+    if (scale >= 50) return '#d32f2f'; // 震度5強以上: 赤
+    if (scale >= 30) return '#f57c00'; // 震度3〜4: オレンジ
+    return '#388e3c'; // 震度1〜2: 緑
 }
 
 // 日付をYYYYMMDD形式に変換
@@ -72,6 +126,85 @@ function showError(message) {
 function setLoading(isLoading) {
     loading.style.display = isLoading ? 'block' : 'none';
     fetchBtn.disabled = isLoading;
+}
+
+/**
+ * 地図上にマーカーを追加
+ */
+function addEarthquakeMarkers(data) {
+    // 既存のマーカーをクリア
+    if (markersLayer) {
+        markersLayer.clearLayers();
+    }
+
+    if (!data || data.length === 0) {
+        return;
+    }
+
+    data.forEach(item => {
+        if (!item.earthquake || !item.earthquake.hypocenter) {
+            return;
+        }
+
+        const eq = item.earthquake;
+        const hypo = eq.hypocenter;
+
+        // 緯度経度を取得
+        const lat = parseCoordinate(hypo.latitude);
+        const lng = parseCoordinate(hypo.longitude);
+
+        // 座標が無効な場合はスキップ
+        if (!lat || !lng) {
+            return;
+        }
+
+        // マーカーの色を決定
+        const color = getMarkerColor(eq.maxScale);
+        const scaleClass = getScaleClass(eq.maxScale);
+
+        // 円形マーカーを作成
+        const marker = L.circleMarker([lat, lng], {
+            radius: 8,
+            fillColor: color,
+            color: '#fff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8
+        });
+
+        // ポップアップの内容を作成
+        const magnitude = hypo.magnitude !== undefined && hypo.magnitude !== -1
+            ? `M${hypo.magnitude.toFixed(1)}`
+            : '不明';
+
+        const depth = hypo.depth !== undefined && hypo.depth !== -1
+            ? `${hypo.depth}km`
+            : '不明';
+
+        const popupContent = `
+            <div class="earthquake-popup">
+                <h4>${hypo.name || '不明'}</h4>
+                <p><strong>発生時刻:</strong> ${eq.time}</p>
+                <p class="scale scale-${scaleClass}">
+                    <strong>最大震度:</strong> ${scaleMap[eq.maxScale.toString()] || '不明'}
+                </p>
+                <p><strong>マグニチュード:</strong> ${magnitude}</p>
+                <p><strong>深さ:</strong> ${depth}</p>
+            </div>
+        `;
+
+        // ポップアップをバインド
+        marker.bindPopup(popupContent);
+
+        // マーカーレイヤーに追加
+        marker.addTo(markersLayer);
+    });
+
+    // マーカーがある場合は地図の表示範囲を調整
+    if (markersLayer.getLayers().length > 0) {
+        const bounds = markersLayer.getBounds();
+        map.fitBounds(bounds, { padding: [50, 50] });
+    }
 }
 
 // 地震情報を表示
@@ -142,7 +275,13 @@ async function loadEarthquakeData() {
 
     try {
         const data = await fetchEarthquakeData(startDateStr, endDateStr, minScale);
+
+        // リスト表示
         displayEarthquakes(data);
+
+        // 地図にマーカーを追加
+        addEarthquakeMarkers(data);
+
     } catch (err) {
         showError(err.message);
         earthquakeList.innerHTML = '';
@@ -160,6 +299,9 @@ function init() {
 
     startDateInput.valueAsDate = weekAgo;
     endDateInput.valueAsDate = today;
+
+    // 地図を初期化
+    initMap();
 
     // イベントリスナーを設定
     fetchBtn.addEventListener('click', loadEarthquakeData);

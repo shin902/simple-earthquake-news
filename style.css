@@ -113,6 +113,52 @@ select:focus {
     transform: scale(0.98);
 }
 
+/* 地震情報マップ */
+.earthquake-map {
+    width: 100%;
+    height: 500px;
+    margin: 20px 0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* ポップアップのスタイル */
+.leaflet-popup-content {
+    margin: 10px;
+    line-height: 1.6;
+}
+
+.earthquake-popup h4 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    color: #333;
+}
+
+.earthquake-popup p {
+    margin: 4px 0;
+    font-size: 14px;
+    color: #666;
+}
+
+.earthquake-popup .scale {
+    font-weight: bold;
+    font-size: 15px;
+}
+
+/* 震度による色分け */
+.earthquake-popup .scale-high {
+    color: #d32f2f;
+}
+
+.earthquake-popup .scale-medium {
+    color: #f57c00;
+}
+
+.earthquake-popup .scale-low {
+    color: #388e3c;
+}
+
 .loading {
     text-align: center;
     padding: 3rem;
@@ -256,6 +302,14 @@ footer a {
 
 footer a:hover {
     text-decoration: underline;
+}
+
+/* モバイル対応 */
+@media (max-width: 768px) {
+    .earthquake-map {
+        height: 400px;
+        margin: 15px 0;
+    }
 }
 
 @media (max-width: 640px) {
