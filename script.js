@@ -60,6 +60,10 @@ function initMap() {
  */
 function parseCoordinate(coord) {
     if (typeof coord === 'number') {
+        // -200 などの無効な座標値を除外
+        if (coord <= -200 || coord >= 200) {
+            return null;
+        }
         return coord;
     }
 
@@ -67,7 +71,13 @@ function parseCoordinate(coord) {
         // "N38.3", "E141.7" などの形式に対応
         const value = parseFloat(coord.replace(/[NSEW]/g, ''));
         const isNegative = coord.includes('S') || coord.includes('W');
-        return isNegative ? -value : value;
+        const result = isNegative ? -value : value;
+
+        // 無効な座標値を除外
+        if (result <= -200 || result >= 200) {
+            return null;
+        }
+        return result;
     }
 
     return null;
@@ -138,8 +148,12 @@ function addEarthquakeMarkers(data) {
     }
 
     if (!data || data.length === 0) {
+        console.log('No data to plot');
         return;
     }
+
+    console.log(`Processing ${data.length} earthquake records`);
+    let validMarkers = 0;
 
     data.forEach(item => {
         if (!item.earthquake || !item.earthquake.hypocenter) {
@@ -153,10 +167,15 @@ function addEarthquakeMarkers(data) {
         const lat = parseCoordinate(hypo.latitude);
         const lng = parseCoordinate(hypo.longitude);
 
-        // 座標が無効な場合はスキップ
-        if (!lat || !lng) {
+        console.log(`Hypocenter: ${hypo.name}, lat: ${hypo.latitude}, lng: ${hypo.longitude}, parsed lat: ${lat}, parsed lng: ${lng}`);
+
+        // 座標が無効な場合はスキップ（nullチェック）
+        if (lat === null || lng === null) {
+            console.log(`Skipping ${hypo.name} - invalid coordinates`);
             return;
         }
+
+        validMarkers++;
 
         // マーカーの色を決定
         const color = getMarkerColor(eq.maxScale);
@@ -200,10 +219,16 @@ function addEarthquakeMarkers(data) {
         marker.addTo(markersLayer);
     });
 
+    console.log(`Added ${validMarkers} valid markers to map`);
+    console.log(`Total layers in markersLayer: ${markersLayer.getLayers().length}`);
+
     // マーカーがある場合は地図の表示範囲を調整
     if (markersLayer.getLayers().length > 0) {
         const bounds = markersLayer.getBounds();
+        console.log('Fitting bounds:', bounds);
         map.fitBounds(bounds, { padding: [50, 50] });
+    } else {
+        console.log('No markers to fit bounds');
     }
 }
 
