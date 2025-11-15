@@ -97,8 +97,8 @@ function formatDateForDisplay(dateStr) {
 
 // APIから地震情報を取得
 async function fetchEarthquakeData(startDateStr, endDateStr, minScale) {
-    // limitを大きくして、より多くのデータを取得可能にする
-    const apiUrl = `https://api.p2pquake.net/v2/jma/quake?limit=1000&order=1&since_date=${startDateStr}&until_date=${endDateStr}&min_scale=${minScale}`;
+    // limitの最大値は100（APIの制限）
+    const apiUrl = `https://api.p2pquake.net/v2/jma/quake?limit=100&order=1&since_date=${startDateStr}&until_date=${endDateStr}&min_scale=${minScale}`;
 
     try {
         const response = await fetch(apiUrl);
