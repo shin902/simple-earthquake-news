@@ -52,7 +52,7 @@ function initMap() {
     }).addTo(map);
 
     // マーカーレイヤーグループを作成
-    markersLayer = L.layerGroup().addTo(map);
+    markersLayer = L.featureGroup().addTo(map);
 }
 
 /**
