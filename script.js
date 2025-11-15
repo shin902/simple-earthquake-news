@@ -97,7 +97,8 @@ function formatDateForDisplay(dateStr) {
 
 // APIから地震情報を取得
 async function fetchEarthquakeData(startDateStr, endDateStr, minScale) {
-    const apiUrl = `https://api.p2pquake.net/v2/jma/quake?limit=100&order=1&since_date=${startDateStr}&until_date=${endDateStr}&min_scale=${minScale}`;
+    // limitを大きくして、より多くのデータを取得可能にする
+    const apiUrl = `https://api.p2pquake.net/v2/jma/quake?limit=1000&order=1&since_date=${startDateStr}&until_date=${endDateStr}&min_scale=${minScale}`;
 
     try {
         const response = await fetch(apiUrl);
@@ -107,6 +108,7 @@ async function fetchEarthquakeData(startDateStr, endDateStr, minScale) {
         }
 
         const data = await response.json();
+        console.log(`取得した地震情報: ${data.length}件`);
         return data;
     } catch (err) {
         throw new Error(`データの取得に失敗しました: ${err.message}`);
@@ -129,9 +131,9 @@ function setLoading(isLoading) {
 }
 
 /**
- * 地図上にマーカーを追加
+ * 地図上にマーカーを追加（非同期バッチ処理）
  */
-function addEarthquakeMarkers(data) {
+async function addEarthquakeMarkers(data) {
     // 既存のマーカーをクリア
     if (markersLayer) {
         markersLayer.clearLayers();
@@ -141,9 +143,16 @@ function addEarthquakeMarkers(data) {
         return;
     }
 
-    data.forEach(item => {
+    console.log(`マーカーを追加中: ${data.length}件`);
+
+    // バッチサイズ（一度に処理するマーカー数）
+    const BATCH_SIZE = 50;
+    const markers = [];
+
+    // 有効なマーカーデータを事前に作成
+    for (let item of data) {
         if (!item.earthquake || !item.earthquake.hypocenter) {
-            return;
+            continue;
         }
 
         const eq = item.earthquake;
@@ -155,22 +164,12 @@ function addEarthquakeMarkers(data) {
 
         // 座標が無効な場合はスキップ
         if (!lat || !lng) {
-            return;
+            continue;
         }
 
         // マーカーの色を決定
         const color = getMarkerColor(eq.maxScale);
         const scaleClass = getScaleClass(eq.maxScale);
-
-        // 円形マーカーを作成
-        const marker = L.circleMarker([lat, lng], {
-            radius: 8,
-            fillColor: color,
-            color: '#fff',
-            weight: 2,
-            opacity: 1,
-            fillOpacity: 0.8
-        });
 
         // ポップアップの内容を作成
         const magnitude = hypo.magnitude !== undefined && hypo.magnitude !== -1
@@ -193,17 +192,53 @@ function addEarthquakeMarkers(data) {
             </div>
         `;
 
-        // ポップアップをバインド
-        marker.bindPopup(popupContent);
+        markers.push({
+            lat,
+            lng,
+            color,
+            popupContent
+        });
+    }
 
-        // マーカーレイヤーに追加
-        marker.addTo(markersLayer);
-    });
+    console.log(`有効なマーカー: ${markers.length}件`);
+
+    // バッチ処理でマーカーを追加
+    for (let i = 0; i < markers.length; i += BATCH_SIZE) {
+        const batch = markers.slice(i, i + BATCH_SIZE);
+
+        // バッチごとにマーカーを作成・追加
+        batch.forEach(markerData => {
+            const marker = L.circleMarker([markerData.lat, markerData.lng], {
+                radius: 8,
+                fillColor: markerData.color,
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            });
+
+            marker.bindPopup(markerData.popupContent);
+            marker.addTo(markersLayer);
+        });
+
+        // 次のバッチ処理まで少し待機（UIがフリーズしないように）
+        if (i + BATCH_SIZE < markers.length) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+    }
+
+    console.log(`マーカー追加完了: ${markersLayer.getLayers().length}個`);
 
     // マーカーがある場合は地図の表示範囲を調整
     if (markersLayer.getLayers().length > 0) {
-        const bounds = markersLayer.getBounds();
-        map.fitBounds(bounds, { padding: [50, 50] });
+        try {
+            const bounds = markersLayer.getBounds();
+            map.fitBounds(bounds, { padding: [50, 50] });
+        } catch (error) {
+            console.error('地図の境界調整に失敗:', error);
+            // エラーが発生しても、デフォルトビューに戻す
+            map.setView([36.5, 138.0], 5);
+        }
     }
 }
 
@@ -279,12 +314,13 @@ async function loadEarthquakeData() {
         // リスト表示
         displayEarthquakes(data);
 
-        // 地図にマーカーを追加
-        addEarthquakeMarkers(data);
+        // 地図にマーカーを追加（非同期処理を待つ）
+        await addEarthquakeMarkers(data);
 
     } catch (err) {
         showError(err.message);
         earthquakeList.innerHTML = '';
+        console.error('データ取得エラー:', err);
     } finally {
         setLoading(false);
     }
