@@ -1,3 +1,20 @@
+// 定数定義
+const CONSTANTS = {
+    SCALE: {
+        STRONG_5_PLUS: 50,  // 震度5強以上
+        LEVEL_3: 30         // 震度3以上
+    },
+    MAP: {
+        BATCH_SIZE: 50,
+        DEFAULT_CENTER: [36.5, 138.0],  // 日本の中心
+        DEFAULT_ZOOM: 5,
+        BOUNDS_PADDING: [50, 50]
+    },
+    API: {
+        MAX_LIMIT: 100  // APIの取得件数上限
+    }
+};
+
 // DOM要素の取得
 const startDateInput = document.getElementById('start-date-input');
 const endDateInput = document.getElementById('end-date-input');
@@ -25,10 +42,20 @@ const scaleMap = {
     '70': '7'
 };
 
+// HTMLエスケープ関数（XSS対策）
+function escapeHtml(text) {
+    if (text === null || text === undefined) {
+        return '';
+    }
+    const div = document.createElement('div');
+    div.textContent = String(text);
+    return div.innerHTML;
+}
+
 // 震度によるクラス分類
 function getScaleClass(scale) {
-    if (scale >= 50) return 'high';
-    if (scale >= 30) return 'medium';
+    if (scale >= CONSTANTS.SCALE.STRONG_5_PLUS) return 'high';
+    if (scale >= CONSTANTS.SCALE.LEVEL_3) return 'medium';
     return 'low';
 }
 
@@ -42,7 +69,7 @@ function initMap() {
     }
 
     // 地図を作成（中心: 日本全体、ズームレベル: 5）
-    map = L.map('map').setView([36.5, 138.0], 5);
+    map = L.map('map').setView(CONSTANTS.MAP.DEFAULT_CENTER, CONSTANTS.MAP.DEFAULT_ZOOM);
 
     // 国土地理院地図タイルレイヤーを追加（淡色地図 - マーカーが見やすい）
     L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
@@ -60,12 +87,15 @@ function initMap() {
  */
 function parseCoordinate(coord) {
     if (typeof coord === 'number') {
-        return coord;
+        return isNaN(coord) ? null : coord;
     }
 
     if (typeof coord === 'string') {
         // "N38.3", "E141.7" などの形式に対応
         const value = parseFloat(coord.replace(/[NSEW]/g, ''));
+        if (isNaN(value)) {
+            return null;
+        }
         const isNegative = coord.includes('S') || coord.includes('W');
         return isNegative ? -value : value;
     }
@@ -77,8 +107,8 @@ function parseCoordinate(coord) {
  * 震度に応じたマーカーの色を取得
  */
 function getMarkerColor(scale) {
-    if (scale >= 50) return '#d32f2f'; // 震度5強以上: 赤
-    if (scale >= 30) return '#f57c00'; // 震度3〜4: オレンジ
+    if (scale >= CONSTANTS.SCALE.STRONG_5_PLUS) return '#d32f2f'; // 震度5強以上: 赤
+    if (scale >= CONSTANTS.SCALE.LEVEL_3) return '#f57c00'; // 震度3〜4: オレンジ
     return '#388e3c'; // 震度1〜2: 緑
 }
 
@@ -90,15 +120,16 @@ function formatDateForAPI(date) {
     return `${year}${month}${day}`;
 }
 
-// 日付を表示用にフォーマット
+// 日付を表示用にフォーマット（現在は何も変換しないが、将来的な拡張のため残す）
 function formatDateForDisplay(dateStr) {
-    return dateStr.replace(/\//g, '/');
+    // 将来的に "2024/11/15" → "2024年11月15日" などに変換可能
+    return dateStr;
 }
 
 // APIから地震情報を取得
 async function fetchEarthquakeData(startDateStr, endDateStr, minScale) {
     // limitの最大値は100（APIの制限）
-    const apiUrl = `https://api.p2pquake.net/v2/jma/quake?limit=100&order=1&since_date=${startDateStr}&until_date=${endDateStr}&min_scale=${minScale}`;
+    const apiUrl = `https://api.p2pquake.net/v2/jma/quake?limit=${CONSTANTS.API.MAX_LIMIT}&order=1&since_date=${startDateStr}&until_date=${endDateStr}&min_scale=${minScale}`;
 
     try {
         const response = await fetch(apiUrl);
@@ -145,8 +176,7 @@ async function addEarthquakeMarkers(data) {
 
     console.log(`マーカーを追加中: ${data.length}件`);
 
-    // バッチサイズ（一度に処理するマーカー数）
-    const BATCH_SIZE = 50;
+    // バッチ処理用のマーカーデータ配列
     const markers = [];
 
     // 有効なマーカーデータを事前に作成
@@ -162,8 +192,9 @@ async function addEarthquakeMarkers(data) {
         const lat = parseCoordinate(hypo.latitude);
         const lng = parseCoordinate(hypo.longitude);
 
-        // 座標が無効な場合はスキップ
-        if (!lat || !lng) {
+        // 座標が無効な場合はスキップ（より厳密なチェック）
+        if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
+            console.log(`震源地不明のためスキップ: ${hypo.name || '不明'} (緯度: ${hypo.latitude}, 経度: ${hypo.longitude})`);
             continue;
         }
 
@@ -182,13 +213,13 @@ async function addEarthquakeMarkers(data) {
 
         const popupContent = `
             <div class="earthquake-popup">
-                <h4>${hypo.name || '不明'}</h4>
-                <p><strong>発生時刻:</strong> ${eq.time}</p>
+                <h4>${escapeHtml(hypo.name || '不明')}</h4>
+                <p><strong>発生時刻:</strong> ${escapeHtml(eq.time)}</p>
                 <p class="scale scale-${scaleClass}">
-                    <strong>最大震度:</strong> ${scaleMap[eq.maxScale.toString()] || '不明'}
+                    <strong>最大震度:</strong> ${escapeHtml(scaleMap[eq.maxScale.toString()] || '不明')}
                 </p>
-                <p><strong>マグニチュード:</strong> ${magnitude}</p>
-                <p><strong>深さ:</strong> ${depth}</p>
+                <p><strong>マグニチュード:</strong> ${escapeHtml(magnitude)}</p>
+                <p><strong>深さ:</strong> ${escapeHtml(depth)}</p>
             </div>
         `;
 
@@ -203,8 +234,8 @@ async function addEarthquakeMarkers(data) {
     console.log(`有効なマーカー: ${markers.length}件`);
 
     // バッチ処理でマーカーを追加
-    for (let i = 0; i < markers.length; i += BATCH_SIZE) {
-        const batch = markers.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < markers.length; i += CONSTANTS.MAP.BATCH_SIZE) {
+        const batch = markers.slice(i, i + CONSTANTS.MAP.BATCH_SIZE);
 
         // バッチごとにマーカーを作成・追加
         batch.forEach(markerData => {
@@ -222,7 +253,7 @@ async function addEarthquakeMarkers(data) {
         });
 
         // 次のバッチ処理まで少し待機（UIがフリーズしないように）
-        if (i + BATCH_SIZE < markers.length) {
+        if (i + CONSTANTS.MAP.BATCH_SIZE < markers.length) {
             await new Promise(resolve => setTimeout(resolve, 10));
         }
     }
@@ -233,11 +264,11 @@ async function addEarthquakeMarkers(data) {
     if (markersLayer.getLayers().length > 0) {
         try {
             const bounds = markersLayer.getBounds();
-            map.fitBounds(bounds, { padding: [50, 50] });
+            map.fitBounds(bounds, { padding: CONSTANTS.MAP.BOUNDS_PADDING });
         } catch (error) {
             console.error('地図の境界調整に失敗:', error);
             // エラーが発生しても、デフォルトビューに戻す
-            map.setView([36.5, 138.0], 5);
+            map.setView(CONSTANTS.MAP.DEFAULT_CENTER, CONSTANTS.MAP.DEFAULT_ZOOM);
         }
     }
 }
@@ -269,19 +300,19 @@ function displayEarthquakes(data) {
 
         card.innerHTML = `
             <div class="earthquake-header">
-                <div class="earthquake-time">${formatDateForDisplay(eq.time)}</div>
+                <div class="earthquake-time">${escapeHtml(formatDateForDisplay(eq.time))}</div>
                 <div class="earthquake-scale ${scaleClass}">
-                    震度 ${scaleMap[maxScale.toString()] || '不明'}
+                    震度 ${escapeHtml(scaleMap[maxScale.toString()] || '不明')}
                 </div>
             </div>
             <div class="earthquake-details">
                 <div class="detail-row">
                     <span class="detail-label">震源地:</span>
-                    <span class="detail-value">${hypocenterName}</span>
+                    <span class="detail-value">${escapeHtml(hypocenterName)}</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">マグニチュード:</span>
-                    <span class="detail-value">${magnitude}</span>
+                    <span class="detail-value">${escapeHtml(magnitude)}</span>
                 </div>
             </div>
         `;
