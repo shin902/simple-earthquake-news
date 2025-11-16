@@ -60,12 +60,15 @@ function initMap() {
  */
 function parseCoordinate(coord) {
     if (typeof coord === 'number') {
-        return coord;
+        return isNaN(coord) ? null : coord;
     }
 
     if (typeof coord === 'string') {
         // "N38.3", "E141.7" などの形式に対応
         const value = parseFloat(coord.replace(/[NSEW]/g, ''));
+        if (isNaN(value)) {
+            return null;
+        }
         const isNegative = coord.includes('S') || coord.includes('W');
         return isNegative ? -value : value;
     }
@@ -162,8 +165,9 @@ async function addEarthquakeMarkers(data) {
         const lat = parseCoordinate(hypo.latitude);
         const lng = parseCoordinate(hypo.longitude);
 
-        // 座標が無効な場合はスキップ
-        if (!lat || !lng) {
+        // 座標が無効な場合はスキップ（より厳密なチェック）
+        if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
+            console.log(`震源地不明のためスキップ: ${hypo.name || '不明'} (緯度: ${hypo.latitude}, 経度: ${hypo.longitude})`);
             continue;
         }
 
